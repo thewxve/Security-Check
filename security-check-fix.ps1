@@ -50,9 +50,8 @@ function Show-Spinner {
     $result = Receive-Job -Job $job
     Remove-Job -Job $job -Force
     
-    Write-Host "`r" -NoNewline
-    Write-Host ("  " + " " * ($Text.Length + 10)) -NoNewline
-    Write-Host "`r" -NoNewline
+    # Limpar linha completamente (80 caracteres para cobrir qualquer texto)
+    Write-Host "`r$(' ' * 80)`r" -NoNewline
     
     return $result
 }
@@ -97,6 +96,8 @@ function Show-CheckItem {
         default  { "Gray" }
     }
     
+    # Limpar linha antes de exibir (evita sobreposicao com barra de progresso)
+    Write-Host "`r$(' ' * 80)`r" -NoNewline
     Write-Host "  $icon " -NoNewline -ForegroundColor $color
     Write-Host "$Name" -NoNewline -ForegroundColor White
     
