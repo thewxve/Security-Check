@@ -1,15 +1,6 @@
-# ==============================
-# SECURITY CHECK & FIX SCRIPT
-# Windows 10 22H2 / Windows 11 23H2
-# Visual Edition v2.0
-# ==============================
-
-# Configuracao do console
-$Host.UI.RawUI.WindowTitle = "Security Check & Fix"
+$Host.UI.RawUI.WindowTitle = "WINDOWS SECURITY TOOL"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ProgressPreference = 'SilentlyContinue'
-
-# ========== FUNCOES DE UI ==========
 
 function Write-Typewriter {
     param(
@@ -40,7 +31,6 @@ function Show-Spinner {
     $result = $null
     $jobDone = $false
     
-    # Executar a acao em background
     $job = Start-Job -ScriptBlock $Action
     
     $i = 0
@@ -52,7 +42,6 @@ function Show-Spinner {
         Start-Sleep -Milliseconds 100
         $i++
         
-        # Verificar se o job terminou E o tempo minimo passou
         if ((Get-Job -Id $job.Id).State -eq 'Completed' -and $elapsed -ge $duration) {
             $jobDone = $true
         }
@@ -61,7 +50,6 @@ function Show-Spinner {
     $result = Receive-Job -Job $job
     Remove-Job -Job $job -Force
     
-    # Limpar a linha do spinner
     Write-Host "`r" -NoNewline
     Write-Host ("  " + " " * ($Text.Length + 10)) -NoNewline
     Write-Host "`r" -NoNewline
@@ -129,9 +117,9 @@ function Show-Header {
     Write-Host "  $border" -ForegroundColor Cyan
     Write-Host ""
     
-    $title = "SECURITY CHECK & FIX"
-    $subtitle = "Windows Security Compliance Tool"
-    $version = "v2.0 Visual Edition"
+    $title = "WINDOWS SECURITY TOOL"
+    $subtitle = "Developed by @bygreatness on Discord"
+    $version = "v2.0 PHANTOM"
     
     $titlePad = [math]::Floor(($width - $title.Length) / 2)
     $subtitlePad = [math]::Floor(($width - $subtitle.Length) / 2)
@@ -171,7 +159,6 @@ function Show-CountdownTimer {
     Write-Host "`r  $Message agora!          " -ForegroundColor Green
 }
 
-# ========== VARIAVEIS DE ESTADO ==========
 $checks = @{
     Admin = @{ Status = "PENDING"; Detail = "" }
     TPM = @{ Status = "PENDING"; Detail = "" }
@@ -188,11 +175,8 @@ $fixNeeded = @{
     HVCI = $false
 }
 
-# ========== INICIO ==========
-
 Show-Header
 
-# ---------- ADMIN CHECK ----------
 Write-Host "  Verificando privilegios..." -ForegroundColor DarkGray
 Start-Sleep -Milliseconds 500
 
@@ -209,7 +193,6 @@ if (-not ([Security.Principal.WindowsPrincipal] `
 $checks.Admin.Status = "OK"
 Show-CheckItem -Name "Privilegios de Administrador" -Status "OK" -Detail "Elevado"
 
-# ---------- OS INFO ----------
 Start-Sleep -Milliseconds 800
 $os = Get-CimInstance Win32_OperatingSystem
 Write-Host ""
@@ -223,7 +206,6 @@ Show-Section "VERIFICACAO DE SEGURANCA"
 $totalChecks = 7
 $currentCheck = 0
 
-# ---------- TPM ----------
 $currentCheck++
 Show-ProgressBar -Current $currentCheck -Total $totalChecks -Label "Verificando TPM"
 
@@ -248,7 +230,6 @@ if ($tpmResult.OK) {
     Show-CheckItem -Name "TPM 2.0" -Status "ERRO" -Detail $tpmResult.Detail
 }
 
-# ---------- SECURE BOOT ----------
 $currentCheck++
 Show-ProgressBar -Current $currentCheck -Total $totalChecks -Label "Verificando Secure Boot"
 
@@ -273,7 +254,6 @@ if ($sbResult.OK) {
     Show-CheckItem -Name "Secure Boot" -Status "ERRO" -Detail $sbResult.Detail
 }
 
-# ---------- UEFI ----------
 $currentCheck++
 Show-ProgressBar -Current $currentCheck -Total $totalChecks -Label "Verificando UEFI"
 
@@ -281,14 +261,12 @@ $uefiResult = Show-Spinner -Text "Detectando modo de firmware..." -Action {
     $detected = $false
     $method = ""
     
-    # Metodo 1: Registro PEFirmwareType
     $fwType = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name PEFirmwareType -ErrorAction SilentlyContinue).PEFirmwareType
     if ($fwType -eq 2) {
         $detected = $true
         $method = "Registro"
     }
     
-    # Metodo 2: bcdedit path
     if (-not $detected) {
         try {
             $bcd = bcdedit /enum '{current}' 2>$null | Select-String "path"
@@ -299,7 +277,6 @@ $uefiResult = Show-Spinner -Text "Detectando modo de firmware..." -Action {
         } catch { }
     }
     
-    # Metodo 3: Particao EFI
     if (-not $detected) {
         try {
             $efi = Get-Partition -ErrorAction SilentlyContinue | 
@@ -322,7 +299,6 @@ if ($uefiResult.OK) {
     Show-CheckItem -Name "UEFI Mode" -Status "ERRO" -Detail "Legacy BIOS detectado"
 }
 
-# ---------- HYPERVISOR ----------
 $currentCheck++
 Show-ProgressBar -Current $currentCheck -Total $totalChecks -Label "Verificando Hypervisor"
 
@@ -348,7 +324,6 @@ if ($hvResult.OK) {
     Show-CheckItem -Name "Hypervisor" -Status "ERRO" -Detail $hvResult.Detail
 }
 
-# ---------- VIRTUALIZATION ----------
 $currentCheck++
 Show-ProgressBar -Current $currentCheck -Total $totalChecks -Label "Verificando Virtualizacao"
 
@@ -356,14 +331,12 @@ $virtResult = Show-Spinner -Text "Detectando suporte a virtualizacao..." -Action
     $detected = $false
     $detail = ""
     
-    # Metodo 1: HypervisorPresent
     $hvPresent = (Get-CimInstance Win32_ComputerSystem).HypervisorPresent
     if ($hvPresent -eq $true) {
         $detected = $true
         $detail = "Hypervisor ativo"
     }
     
-    # Metodo 2: Flags do processador
     if (-not $detected) {
         $proc = Get-CimInstance Win32_Processor
         if ($proc.VirtualizationFirmwareEnabled -eq $true) {
@@ -387,7 +360,6 @@ if ($virtResult.OK) {
     Show-CheckItem -Name "Virtualizacao (VT-x/SVM)" -Status "ERRO" -Detail "Verifique BIOS/UEFI"
 }
 
-# ---------- HVCI ----------
 $currentCheck++
 Show-ProgressBar -Current $currentCheck -Total $totalChecks -Label "Verificando HVCI"
 
@@ -411,7 +383,6 @@ if ($hvciResult.OK) {
     Show-CheckItem -Name "HVCI (Memory Integrity)" -Status "ERRO" -Detail $hvciResult.Detail
 }
 
-# ---------- VBS ----------
 $currentCheck++
 Show-ProgressBar -Current $currentCheck -Total $totalChecks -Label "Verificando VBS"
 
@@ -429,7 +400,6 @@ if ($checks.Hypervisor.Status -eq "OK" -and $checks.HVCI.Status -eq "OK") {
     Show-CheckItem -Name "VBS (Virtualization-Based Security)" -Status "ALERTA" -Detail "Incompleto"
 }
 
-# ========== FIX AUTOMATICO ==========
 if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     Show-Section "APLICANDO CORRECOES AUTOMATICAS"
     
@@ -442,7 +412,6 @@ if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     }
     Write-Host ""
     
-    # Animacao de "preparando fix"
     Write-Host "  Preparando correcoes" -NoNewline -ForegroundColor Cyan
     for ($i = 0; $i -lt 3; $i++) {
         Start-Sleep -Milliseconds 500
@@ -451,7 +420,6 @@ if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     Write-Host ""
     Write-Host ""
     
-    # Fix Hypervisor
     if ($fixNeeded.Hypervisor) {
         $null = Show-Spinner -Text "Ativando Hypervisor (bcdedit)..." -Action {
             bcdedit /set hypervisorlaunchtype auto 2>$null | Out-Null
@@ -461,7 +429,6 @@ if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
         Show-CheckItem -Name "Hypervisor" -Status "FIX" -Detail "Configurado para Auto"
     }
     
-    # Fix HVCI
     if ($fixNeeded.HVCI) {
         $null = Show-Spinner -Text "Ativando HVCI (Memory Integrity)..." -Action {
             $hvciPath = "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity"
@@ -479,10 +446,8 @@ if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     Write-Host "  Correcoes aplicadas com sucesso!" -ForegroundColor Green
 }
 
-# ========== RESUMO FINAL ==========
 Show-Section "RESUMO"
 
-# Contar status
 $okCount = ($checks.Values | Where-Object { $_.Status -eq "OK" }).Count
 $errCount = ($checks.Values | Where-Object { $_.Status -eq "ERRO" }).Count
 $alertCount = ($checks.Values | Where-Object { $_.Status -eq "ALERTA" }).Count
@@ -496,7 +461,6 @@ Write-Host "$alertCount ALERTA" -ForegroundColor Yellow
 
 Write-Host ""
 
-# ========== BOX FINAL ==========
 $boxWidth = 50
 $border = "=" * $boxWidth
 
@@ -513,8 +477,7 @@ if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     Write-Host ""
     Write-Host "  $border" -ForegroundColor DarkCyan
     Write-Host ""
-    
-    # Pergunta se quer reiniciar
+
     Write-Host "  Deseja reiniciar agora? (S/N): " -NoNewline -ForegroundColor Yellow
     $response = Read-Host
     
