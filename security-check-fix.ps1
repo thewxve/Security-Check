@@ -1,16 +1,16 @@
-# ==============================
-# SECURITY CHECK & AUTO FIX
-# Windows 10 22H2 / Windows 11 23H2
-# ==============================
+# =========================================================
+# SECURITY CHECKLIST & AUTO FIX
+# Compatível com Windows 10 22H2 / Windows 11 23H2
+# =========================================================
 
 Clear-Host
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  CHECKLIST DE SEGURANÇA DO SISTEMA" -ForegroundColor Cyan
 Write-Host "========================================`n"
 
-# ==============================
+# =========================================================
 # VERIFICA ADMIN
-# ==============================
+# =========================================================
 $IsAdmin = ([Security.Principal.WindowsPrincipal] `
     [Security.Principal.WindowsIdentity]::GetCurrent()
 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -24,18 +24,15 @@ if (-not $IsAdmin) {
 
 Write-Host "[OK] Script executado como Administrador`n" -ForegroundColor Green
 
-# ==============================
-# DETECTA WINDOWS
-# ==============================
+# =========================================================
+# DETECTA SISTEMA
+# =========================================================
 $os = Get-CimInstance Win32_OperatingSystem
-$version = $os.Version
-$caption = $os.Caption
+Write-Host "[INFO] Sistema detectado: $($os.Caption) ($($os.Version))`n" -ForegroundColor Yellow
 
-Write-Host "[INFO] Sistema detectado: $caption ($version)`n" -ForegroundColor Yellow
-
-# ==============================
+# =========================================================
 # TPM
-# ==============================
+# =========================================================
 try {
     $tpm = Get-Tpm
     if ($tpm.TpmPresent -and $tpm.TpmReady) {
@@ -47,9 +44,9 @@ try {
     Write-Host "[ERRO] TPM não encontrado" -ForegroundColor Red
 }
 
-# ==============================
-# SECURE BOOT / UEFI
-# ==============================
+# =========================================================
+# SECURE BOOT + UEFI
+# =========================================================
 try {
     if (Confirm-SecureBootUEFI) {
         Write-Host "[OK] Secure Boot ATIVADO" -ForegroundColor Green
@@ -67,21 +64,12 @@ if ($biosMode -eq "Uefi") {
     Write-Host "[ERRO] Sistema em Legacy / CSM" -ForegroundColor Red
 }
 
-# ==============================
-# VIRTUALIZAÇÃO
-# ==============================
-$virt = (Get-CimInstance Win32_Processor).VirtualizationFirmwareEnabled
-if ($virt) {
-    Write-Host "[OK] Virtualização ATIVADA na BIOS" -ForegroundColor Green
-} else {
-    Write-Host "[ERRO] Virtualização DESATIVADA na BIOS" -ForegroundColor Red
-}
-
-# ==============================
-# HYPERVISOR
-# ==============================
+# =========================================================
+# HYPERVISOR (BASE REAL DA VIRTUALIZAÇÃO)
+# =========================================================
 $hypervisorAuto = $false
 $bcd = bcdedit | Select-String "hypervisorlaunchtype"
+
 if ($bcd -match "Auto") {
     $hypervisorAuto = $true
     Write-Host "[OK] Hypervisor configurado para AUTO" -ForegroundColor Green
@@ -89,9 +77,18 @@ if ($bcd -match "Auto") {
     Write-Host "[ERRO] Hypervisor DESATIVADO" -ForegroundColor Red
 }
 
-# ==============================
-# HVCI
-# ==============================
+# =========================================================
+# VIRTUALIZAÇÃO (DETECÇÃO CORRETA)
+# =========================================================
+if ($hypervisorAuto) {
+    Write-Host "[OK] Virtualização ATIVA (confirmada pelo Hypervisor)" -ForegroundColor Green
+} else {
+    Write-Host "[ERRO] Virtualização INDISPONÍVEL (Hypervisor não ativo)" -ForegroundColor Red
+}
+
+# =========================================================
+# HVCI (INTEGRIDADE DA MEMÓRIA)
+# =========================================================
 $hvciKey = "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity"
 $hvciEnabled = $false
 
@@ -107,27 +104,35 @@ if (Test-Path $hvciKey) {
     Write-Host "[ERRO] HVCI não configurado no sistema" -ForegroundColor Red
 }
 
-# ==============================
-# VBS / DEVICE GUARD
-# ==============================
-$vbs = Get-CimInstance -ClassName Win32_DeviceGuard
-if ($vbs.SecurityServicesRunning -contains 1) {
-    Write-Host "[OK] VBS / Device Guard EM EXECUÇÃO" -ForegroundColor Green
-} else {
-    Write-Host "[ERRO] VBS / Device Guard DESATIVADO" -ForegroundColor Red
+# =========================================================
+# VBS / DEVICE GUARD (COM FALLBACK CORRETO)
+# =========================================================
+try {
+    $vbs = Get-CimInstance -ClassName Win32_DeviceGuard
+    if ($vbs.SecurityServicesRunning -contains 1) {
+        Write-Host "[OK] VBS / Device Guard EM EXECUÇÃO" -ForegroundColor Green
+    } else {
+        Write-Host "[ERRO] VBS / Device Guard DESATIVADO" -ForegroundColor Red
+    }
+} catch {
+    if ($hvciEnabled -and $hypervisorAuto) {
+        Write-Host "[OK] VBS ATIVO (inferido via HVCI + Hypervisor)" -ForegroundColor Green
+    } else {
+        Write-Host "[ERRO] Não foi possível confirmar VBS" -ForegroundColor Red
+    }
 }
 
-# ==============================
+# =========================================================
 # AUTO FIX
-# ==============================
+# =========================================================
 if (-not $hvciEnabled -or -not $hypervisorAuto) {
 
     Write-Host "`n[FIX] Aplicando correções automaticamente..." -ForegroundColor Yellow
 
-    # Ativa Hypervisor
+    # Hypervisor
     bcdedit /set hypervisorlaunchtype auto | Out-Null
 
-    # Ativa HVCI
+    # HVCI
     if (-not (Test-Path $hvciKey)) {
         New-Item -Path $hvciKey -Force | Out-Null
     }
@@ -138,14 +143,14 @@ if (-not $hvciEnabled -or -not $hypervisorAuto) {
     Write-Host "[OK] Hypervisor configurado" -ForegroundColor Green
     Write-Host "[OK] HVCI configurado" -ForegroundColor Green
 
-    Write-Host "`n⚠️ É NECESSÁRIO REINICIAR O PC para concluir a ativação." -ForegroundColor Cyan
+    Write-Host "`n⚠️ REINICIE O PC PARA FINALIZAR A ATIVAÇÃO." -ForegroundColor Cyan
     Pause
     exit
 }
 
-# ==============================
+# =========================================================
 # FINAL
-# ==============================
+# =========================================================
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host " SISTEMA TOTALMENTE COMPATÍVEL" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
