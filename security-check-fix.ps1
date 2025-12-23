@@ -391,7 +391,6 @@ Write-Host "`r" -NoNewline
 Write-Host ("  " + " " * 60) -NoNewline
 Write-Host "`r" -NoNewline
 
-# VBS = Hypervisor OK + HVCI OK
 if ($checks.Hypervisor.Status -eq "OK" -and $checks.HVCI.Status -eq "OK") {
     $checks.VBS.Status = "OK"
     Show-CheckItem -Name "VBS (Virtualization-Based Security)" -Status "OK" -Detail "Hypervisor + HVCI"
@@ -491,9 +490,9 @@ if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     }
 } else {
     Write-Host ""
-    Write-Host "     SISTEMA SEGURO" -ForegroundColor Green
+    Write-Host "     SISTEMA FUNCIONANDO" -ForegroundColor Green
     Write-Host ""
-    Write-Host "     Todas as configuracoes de seguranca" -ForegroundColor White
+    Write-Host "     Todas as configuracoes necessarias" -ForegroundColor White
     Write-Host "     estao ativas e funcionando!" -ForegroundColor White
     Write-Host ""
     Write-Host "  $border" -ForegroundColor DarkCyan
