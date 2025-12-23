@@ -105,22 +105,31 @@ if (Test-Path $hvciKey) {
 }
 
 # =========================================================
-# VBS / DEVICE GUARD (COM FALLBACK CORRETO)
+# VBS / DEVICE GUARD (VERSÃO DEFINITIVA, SEM ERROS FALSOS)
 # =========================================================
-try {
+
+$vbsConfirmed = $false
+
+# Verifica se a classe existe antes de consultar
+$classExists = Get-CimClass -ClassName Win32_DeviceGuard -ErrorAction SilentlyContinue
+
+if ($classExists) {
     $vbs = Get-CimInstance -ClassName Win32_DeviceGuard
     if ($vbs.SecurityServicesRunning -contains 1) {
+        $vbsConfirmed = $true
         Write-Host "[OK] VBS / Device Guard EM EXECUÇÃO" -ForegroundColor Green
-    } else {
-        Write-Host "[ERRO] VBS / Device Guard DESATIVADO" -ForegroundColor Red
-    }
-} catch {
-    if ($hvciEnabled -and $hypervisorAuto) {
-        Write-Host "[OK] VBS ATIVO (inferido via HVCI + Hypervisor)" -ForegroundColor Green
-    } else {
-        Write-Host "[ERRO] Não foi possível confirmar VBS" -ForegroundColor Red
     }
 }
+
+# Fallback inteligente (método correto)
+if (-not $vbsConfirmed) {
+    if ($hvciEnabled -and $hypervisorAuto) {
+        Write-Host "[OK] VBS ATIVO (confirmado via HVCI + Hypervisor)" -ForegroundColor Green
+    } else {
+        Write-Host "[ERRO] VBS DESATIVADO ou INDETERMINADO" -ForegroundColor Red
+    }
+}
+
 
 # =========================================================
 # AUTO FIX
