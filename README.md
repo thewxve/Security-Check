@@ -25,7 +25,7 @@ Se o **Hypervisor** ou o **HVCI** estiverem desativados, o script:
 ## ▶️ Como executar (1 linha)
 Abra o **PowerShell como Administrador** e execute:
 
-powershell -ep bypass -c "irm https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPO/main/security-check-fix.ps1 | iex"
+powershell -ep bypass -c "irm https://raw.githubusercontent.com/thewxve/Security-Check/main/security-check-fix.ps1 | iex"
 
 # ⚠️ Importante
 
