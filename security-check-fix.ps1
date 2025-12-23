@@ -1,6 +1,6 @@
 # =========================================================
 # SECURITY CHECKLIST & AUTO FIX
-# Compatível com Windows 10 22H2 / Windows 11 23H2
+# Windows 10 22H2 / Windows 11 23H2
 # =========================================================
 
 Clear-Host
@@ -17,7 +17,6 @@ $IsAdmin = ([Security.Principal.WindowsPrincipal] `
 
 if (-not $IsAdmin) {
     Write-Host "[ERRO] Execute este script como ADMINISTRADOR." -ForegroundColor Red
-    Write-Host "Clique com o botão direito no PowerShell e selecione 'Executar como administrador'."
     Pause
     exit
 }
@@ -25,7 +24,7 @@ if (-not $IsAdmin) {
 Write-Host "[OK] Script executado como Administrador`n" -ForegroundColor Green
 
 # =========================================================
-# DETECTA SISTEMA
+# SISTEMA
 # =========================================================
 $os = Get-CimInstance Win32_OperatingSystem
 Write-Host "[INFO] Sistema detectado: $($os.Caption) ($($os.Version))`n" -ForegroundColor Yellow
@@ -65,7 +64,7 @@ if ($biosMode -eq "Uefi") {
 }
 
 # =========================================================
-# HYPERVISOR (BASE REAL DA VIRTUALIZAÇÃO)
+# HYPERVISOR (BASE DA VIRTUALIZAÇÃO)
 # =========================================================
 $hypervisorAuto = $false
 $bcd = bcdedit | Select-String "hypervisorlaunchtype"
@@ -83,11 +82,11 @@ if ($bcd -match "Auto") {
 if ($hypervisorAuto) {
     Write-Host "[OK] Virtualização ATIVA (confirmada pelo Hypervisor)" -ForegroundColor Green
 } else {
-    Write-Host "[ERRO] Virtualização INDISPONÍVEL (Hypervisor não ativo)" -ForegroundColor Red
+    Write-Host "[ERRO] Virtualização INDISPONÍVEL" -ForegroundColor Red
 }
 
 # =========================================================
-# HVCI (INTEGRIDADE DA MEMÓRIA)
+# HVCI (MEMORY INTEGRITY)
 # =========================================================
 $hvciKey = "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity"
 $hvciEnabled = $false
@@ -105,31 +104,13 @@ if (Test-Path $hvciKey) {
 }
 
 # =========================================================
-# VBS / DEVICE GUARD (VERSÃO DEFINITIVA, SEM ERROS FALSOS)
+# VBS (CONFIRMAÇÃO CORRETA)
 # =========================================================
-
-$vbsConfirmed = $false
-
-# Verifica se a classe existe antes de consultar
-$classExists = Get-CimClass -ClassName Win32_DeviceGuard -ErrorAction SilentlyContinue
-
-if ($classExists) {
-    $vbs = Get-CimInstance -ClassName Win32_DeviceGuard
-    if ($vbs.SecurityServicesRunning -contains 1) {
-        $vbsConfirmed = $true
-        Write-Host "[OK] VBS / Device Guard EM EXECUÇÃO" -ForegroundColor Green
-    }
+if ($hvciEnabled -and $hypervisorAuto) {
+    Write-Host "[OK] VBS ATIVO (confirmado via HVCI + Hypervisor)" -ForegroundColor Green
+} else {
+    Write-Host "[ERRO] VBS DESATIVADO ou INDISPONÍVEL" -ForegroundColor Red
 }
-
-# Fallback inteligente (método correto)
-if (-not $vbsConfirmed) {
-    if ($hvciEnabled -and $hypervisorAuto) {
-        Write-Host "[OK] VBS ATIVO (confirmado via HVCI + Hypervisor)" -ForegroundColor Green
-    } else {
-        Write-Host "[ERRO] VBS DESATIVADO ou INDETERMINADO" -ForegroundColor Red
-    }
-}
-
 
 # =========================================================
 # AUTO FIX
@@ -138,10 +119,8 @@ if (-not $hvciEnabled -or -not $hypervisorAuto) {
 
     Write-Host "`n[FIX] Aplicando correções automaticamente..." -ForegroundColor Yellow
 
-    # Hypervisor
     bcdedit /set hypervisorlaunchtype auto | Out-Null
 
-    # HVCI
     if (-not (Test-Path $hvciKey)) {
         New-Item -Path $hvciKey -Force | Out-Null
     }
@@ -151,7 +130,6 @@ if (-not $hvciEnabled -or -not $hypervisorAuto) {
 
     Write-Host "[OK] Hypervisor configurado" -ForegroundColor Green
     Write-Host "[OK] HVCI configurado" -ForegroundColor Green
-
     Write-Host "`n⚠️ REINICIE O PC PARA FINALIZAR A ATIVAÇÃO." -ForegroundColor Cyan
     Pause
     exit
