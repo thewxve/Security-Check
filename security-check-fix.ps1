@@ -2,6 +2,8 @@ $Host.UI.RawUI.WindowTitle = "WINDOWS SECURITY TOOL"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ProgressPreference = 'SilentlyContinue'
 
+# ==================== FUNCOES DE UI ====================
+
 function Write-Typewriter {
     param(
         [string]$Text,
@@ -50,7 +52,6 @@ function Show-Spinner {
     $result = Receive-Job -Job $job
     Remove-Job -Job $job -Force
     
-    # Limpar linha completamente (80 caracteres para cobrir qualquer texto)
     Write-Host "`r$(' ' * 80)`r" -NoNewline
     
     return $result
@@ -76,7 +77,7 @@ function Show-ProgressBar {
 function Show-CheckItem {
     param(
         [string]$Name,
-        [string]$Status,  # "OK", "ERRO", "ALERTA", "FIX"
+        [string]$Status,
         [string]$Detail = ""
     )
     
@@ -85,6 +86,7 @@ function Show-CheckItem {
         "ERRO"   { "[X]"; break }
         "ALERTA" { "[!]"; break }
         "FIX"    { "[~]"; break }
+        "INFO"   { "[i]"; break }
         default  { "[ ]" }
     }
     
@@ -93,10 +95,10 @@ function Show-CheckItem {
         "ERRO"   { "Red"; break }
         "ALERTA" { "Yellow"; break }
         "FIX"    { "Magenta"; break }
+        "INFO"   { "Cyan"; break }
         default  { "Gray" }
     }
     
-    # Limpar linha antes de exibir (evita sobreposicao com barra de progresso)
     Write-Host "`r$(' ' * 80)`r" -NoNewline
     Write-Host "  $icon " -NoNewline -ForegroundColor $color
     Write-Host "$Name" -NoNewline -ForegroundColor White
@@ -110,17 +112,19 @@ function Show-CheckItem {
 }
 
 function Show-Header {
+    param([switch]$NoClear)
+    
     $width = 60
     $border = "=" * $width
     
-    Clear-Host
+    if (-not $NoClear) { Clear-Host }
     Write-Host ""
     Write-Host "  $border" -ForegroundColor Cyan
     Write-Host ""
     
     $title = "WINDOWS SECURITY TOOL"
     $subtitle = "Developed by @bygreatness on Discord"
-    $version = "v2.0 PHANTOM"
+    $version = "v3.0 PHANTOM"
     
     $titlePad = [math]::Floor(($width - $title.Length) / 2)
     $subtitlePad = [math]::Floor(($width - $subtitle.Length) / 2)
@@ -160,6 +164,60 @@ function Show-CountdownTimer {
     Write-Host "`r  $Message agora!          " -ForegroundColor Green
 }
 
+# ==================== FUNCOES DE VERIFICACAO ====================
+
+function Get-NetworkInfo {
+    $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+    $result = @{
+        MACs = @()
+        IPs = @()
+    }
+    
+    foreach ($adapter in $adapters) {
+        $result.MACs += "$($adapter.Name): $($adapter.MacAddress)"
+        
+        $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        if ($ipConfig) {
+            $result.IPs += "$($adapter.Name): $($ipConfig.IPAddress)"
+        }
+    }
+    
+    return $result
+}
+
+function Get-TPMStatus {
+    try {
+        $tpm = Get-Tpm -ErrorAction Stop
+        if ($tpm.TpmPresent -and $tpm.TpmReady) {
+            return @{ OK = $true; Detail = "TPM 2.0 Ready" }
+        } else {
+            return @{ OK = $false; Detail = "Ausente ou nao pronto" }
+        }
+    } catch {
+        return @{ OK = $false; Detail = "Erro ao verificar" }
+    }
+}
+
+function Get-HVCIStatus {
+    $hvciPath = "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity"
+    $hvci = Get-ItemProperty -Path $hvciPath -Name Enabled -ErrorAction SilentlyContinue
+    
+    if ($hvci.Enabled -eq 1) {
+        return @{ OK = $true; Detail = "Ativado" }
+    } else {
+        return @{ OK = $false; Detail = "Desativado" }
+    }
+}
+
+# ==================== VARIAVEIS GLOBAIS ====================
+
+$script:initialState = @{
+    MACs = @()
+    IPs = @()
+    TPM = ""
+    HVCI = ""
+}
+
 $checks = @{
     Admin = @{ Status = "PENDING"; Detail = "" }
     TPM = @{ Status = "PENDING"; Detail = "" }
@@ -175,6 +233,147 @@ $fixNeeded = @{
     Hypervisor = $false
     HVCI = $false
 }
+
+# ==================== MENU PRINCIPAL ====================
+
+function Show-Menu {
+    $width = 50
+    $border = "=" * $width
+    
+    Write-Host ""
+    Write-Host "  $border" -ForegroundColor DarkCyan
+    Write-Host ""
+    Write-Host "     MENU DE OPCOES" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "     [1] Verificar Spoof" -ForegroundColor White
+    Write-Host "     [2] Sair" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  $border" -ForegroundColor DarkCyan
+    Write-Host ""
+    Write-Host "  Escolha uma opcao: " -NoNewline -ForegroundColor Cyan
+}
+
+function Show-SpoofWarning {
+    Clear-Host
+    $width = 60
+    $border = "=" * $width
+    
+    Write-Host ""
+    Write-Host "  $border" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "     !! ATENCAO !!" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "     Esta opcao deve ser executada SOMENTE apos" -ForegroundColor Yellow
+    Write-Host "     o uso do programa de alteracao (spoof)." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "     Execute essa verificacao apenas depois de" -ForegroundColor Yellow
+    Write-Host "     concluir TODAS as alteracoes no sistema." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  $border" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Deseja continuar? (S/N): " -NoNewline -ForegroundColor Cyan
+    
+    $response = Read-Host
+    return ($response -match "^[Ss]")
+}
+
+function Show-SpoofVerification {
+    Clear-Host
+    $width = 60
+    $border = "=" * $width
+    
+    Write-Host ""
+    Write-Host "  $border" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "     VERIFICACAO DE SPOOF" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  $border" -ForegroundColor Cyan
+    
+    Show-Section "ESTADO INICIAL (Antes do Spoof)"
+    
+    Write-Host "  MAC Address:" -ForegroundColor Yellow
+    foreach ($mac in $script:initialState.MACs) {
+        Write-Host "    $mac" -ForegroundColor DarkGray
+    }
+    
+    Write-Host ""
+    Write-Host "  IP Address:" -ForegroundColor Yellow
+    foreach ($ip in $script:initialState.IPs) {
+        Write-Host "    $ip" -ForegroundColor DarkGray
+    }
+    
+    Write-Host ""
+    Write-Host "  TPM 2.0:    " -NoNewline -ForegroundColor Yellow
+    Write-Host "$($script:initialState.TPM)" -ForegroundColor DarkGray
+    
+    Write-Host "  HVCI:       " -NoNewline -ForegroundColor Yellow
+    Write-Host "$($script:initialState.HVCI)" -ForegroundColor DarkGray
+    
+    Show-Section "ESTADO ATUAL (Apos Spoof)"
+    
+    Write-Host "  Coletando dados atuais..." -ForegroundColor DarkGray
+    Start-Sleep -Milliseconds 1000
+    
+    $currentNetwork = Get-NetworkInfo
+    $currentTPM = Get-TPMStatus
+    $currentHVCI = Get-HVCIStatus
+    
+    Write-Host "`r$(' ' * 80)`r" -NoNewline
+    
+    Write-Host "  MAC Address:" -ForegroundColor Yellow
+    foreach ($mac in $currentNetwork.MACs) {
+        $macValue = $mac.Split(": ")[1]
+        $originalMAC = ($script:initialState.MACs | Where-Object { $_ -match $mac.Split(":")[0] }) -replace ".*: ", ""
+        
+        if ($macValue -ne $originalMAC) {
+            Write-Host "    $mac " -NoNewline -ForegroundColor Green
+            Write-Host "[ALTERADO]" -ForegroundColor Green
+        } else {
+            Write-Host "    $mac " -NoNewline -ForegroundColor Red
+            Write-Host "[IGUAL]" -ForegroundColor Red
+        }
+    }
+    
+    Write-Host ""
+    Write-Host "  IP Address:" -ForegroundColor Yellow
+    foreach ($ip in $currentNetwork.IPs) {
+        $ipValue = $ip.Split(": ")[1]
+        $originalIP = ($script:initialState.IPs | Where-Object { $_ -match $ip.Split(":")[0] }) -replace ".*: ", ""
+        
+        if ($ipValue -ne $originalIP) {
+            Write-Host "    $ip " -NoNewline -ForegroundColor Green
+            Write-Host "[ALTERADO]" -ForegroundColor Green
+        } else {
+            Write-Host "    $ip " -NoNewline -ForegroundColor DarkGray
+            Write-Host "[IGUAL]" -ForegroundColor DarkGray
+        }
+    }
+    
+    Write-Host ""
+    Write-Host "  TPM 2.0:    " -NoNewline -ForegroundColor Yellow
+    Write-Host "$($currentTPM.Detail) " -NoNewline -ForegroundColor DarkGray
+    if ($currentTPM.Detail -eq $script:initialState.TPM) {
+        Write-Host "[IGUAL]" -ForegroundColor DarkGray
+    } else {
+        Write-Host "[ALTERADO]" -ForegroundColor Yellow
+    }
+    
+    Write-Host "  HVCI:       " -NoNewline -ForegroundColor Yellow
+    Write-Host "$($currentHVCI.Detail) " -NoNewline -ForegroundColor DarkGray
+    if ($currentHVCI.Detail -eq $script:initialState.HVCI) {
+        Write-Host "[IGUAL]" -ForegroundColor DarkGray
+    } else {
+        Write-Host "[ALTERADO]" -ForegroundColor Yellow
+    }
+    
+    Write-Host ""
+    Write-Host "  $border" -ForegroundColor DarkCyan
+    Write-Host ""
+    Write-Host "  Pressione qualquer tecla para voltar ao menu..." -ForegroundColor DarkGray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
+
+# ==================== INICIO DO SCRIPT ====================
 
 Show-Header
 
@@ -202,6 +401,37 @@ Write-Typewriter -Text "$($os.Caption)" -Color White -MinDelay 5 -MaxDelay 15
 Write-Host "  Build:   " -NoNewline -ForegroundColor DarkGray
 Write-Host "$($os.Version)" -ForegroundColor Cyan
 
+# ==================== INFORMACOES DO SISTEMA ====================
+
+Show-Section "INFORMACOES DO SISTEMA"
+
+$networkInfo = Show-Spinner -Text "Coletando informacoes de rede..." -Action {
+    $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+    $result = @{ MACs = @(); IPs = @() }
+    
+    foreach ($adapter in $adapters) {
+        $result.MACs += "$($adapter.Name): $($adapter.MacAddress)"
+        $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        if ($ipConfig) {
+            $result.IPs += "$($adapter.Name): $($ipConfig.IPAddress)"
+        }
+    }
+    return $result
+} -MinDuration 1500 -MaxDuration 2500
+
+$script:initialState.MACs = $networkInfo.MACs
+$script:initialState.IPs = $networkInfo.IPs
+
+foreach ($mac in $networkInfo.MACs) {
+    Show-CheckItem -Name "MAC Address" -Status "INFO" -Detail $mac
+}
+
+foreach ($ip in $networkInfo.IPs) {
+    Show-CheckItem -Name "IP Address" -Status "INFO" -Detail $ip
+}
+
+# ==================== VERIFICACAO DE SEGURANCA ====================
+
 Show-Section "VERIFICACAO DE SEGURANCA"
 
 $totalChecks = 7
@@ -222,6 +452,8 @@ $tpmResult = Show-Spinner -Text "Analisando TPM 2.0..." -Action {
         return @{ OK = $false; Detail = "Erro ao verificar" }
     }
 }
+
+$script:initialState.TPM = $tpmResult.Detail
 
 if ($tpmResult.OK) {
     $checks.TPM.Status = "OK"
@@ -375,6 +607,8 @@ $hvciResult = Show-Spinner -Text "Verificando Memory Integrity (HVCI)..." -Actio
     }
 }
 
+$script:initialState.HVCI = $hvciResult.Detail
+
 if ($hvciResult.OK) {
     $checks.HVCI.Status = "OK"
     Show-CheckItem -Name "HVCI (Memory Integrity)" -Status "OK" -Detail $hvciResult.Detail
@@ -388,9 +622,7 @@ $currentCheck++
 Show-ProgressBar -Current $currentCheck -Total $totalChecks -Label "Verificando VBS"
 
 Start-Sleep -Milliseconds 500
-Write-Host "`r" -NoNewline
-Write-Host ("  " + " " * 60) -NoNewline
-Write-Host "`r" -NoNewline
+Write-Host "`r$(' ' * 80)`r" -NoNewline
 
 if ($checks.Hypervisor.Status -eq "OK" -and $checks.HVCI.Status -eq "OK") {
     $checks.VBS.Status = "OK"
@@ -399,6 +631,8 @@ if ($checks.Hypervisor.Status -eq "OK" -and $checks.HVCI.Status -eq "OK") {
     $checks.VBS.Status = "ALERTA"
     Show-CheckItem -Name "VBS (Virtualization-Based Security)" -Status "ALERTA" -Detail "Incompleto"
 }
+
+# ==================== FIX AUTOMATICO ====================
 
 if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     Show-Section "APLICANDO CORRECOES AUTOMATICAS"
@@ -445,6 +679,8 @@ if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     Write-Host ""
     Write-Host "  Correcoes aplicadas com sucesso!" -ForegroundColor Green
 }
+
+# ==================== RESUMO ====================
 
 Show-Section "RESUMO"
 
@@ -499,6 +735,34 @@ if ($fixNeeded.Hypervisor -or $fixNeeded.HVCI) {
     Write-Host "  $border" -ForegroundColor DarkCyan
 }
 
+# ==================== LOOP DO MENU ====================
+
+$continueMenu = $true
+
+while ($continueMenu) {
+    Show-Menu
+    $choice = Read-Host
+    
+    switch ($choice) {
+        "1" {
+            if (Show-SpoofWarning) {
+                Show-SpoofVerification
+            }
+        }
+        "2" {
+            $continueMenu = $false
+            Write-Host ""
+            Write-Host "  Saindo..." -ForegroundColor DarkGray
+            Start-Sleep -Milliseconds 500
+        }
+        default {
+            Write-Host ""
+            Write-Host "  Opcao invalida!" -ForegroundColor Red
+            Start-Sleep -Milliseconds 1000
+        }
+    }
+}
+
 Write-Host ""
-Write-Host "  Pressione qualquer tecla para sair..." -ForegroundColor DarkGray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+Write-Host "  Obrigado por usar o Windows Security Tool!" -ForegroundColor Cyan
+Write-Host ""
